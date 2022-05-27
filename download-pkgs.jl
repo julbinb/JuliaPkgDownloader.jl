@@ -62,8 +62,10 @@ end
 # Main
 #--------------------------------------------------
 
-@info "Initiating packages downloading..."
 (args, noverbose) = parse_download_cmd()
+@info "Initiating packages downloading..."
 @everywhere JuliaPkgDownloader.setVerbose(!$noverbose)
-(downloaded, total) = downloadAllPkgs(args...)
+(downloaded, total, failedPkgs) = downloadAllPkgs(args...)
 @info "Successfully processed $(downloaded)/$(total) packages"
+@info "Failed packages:"
+foreach((pkg -> @info "- $pkg"), failedPkgs)

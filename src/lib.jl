@@ -57,12 +57,13 @@ Each pkg info contains:
 """
 downloadAllPkgs(
     pkgsData :: Pair{Bool, Vector}, dest :: AbstractString, overwrite :: Bool
-) :: Tuple{Int, Int} = begin
+) :: Tuple{Int, Int, Vector} = begin
     pkgsData.first || 
         throw(PkgsListInfoBadFormat("Package versions have to be provided"))
     isdir(dest) || mkdir(dest) # create destinatation if necessary
     # choose sequential or distributed map based on the number of procs
     mapfunc = nprocs() > 1 ? pmap : map
+    failedPkgs = AbstractString[]
     # processing a single package [name, uuid, version]
     processPkg(pkgInfo :: Vector) = begin
         @status "processing $(pkgInfo[1])"
@@ -78,10 +79,11 @@ downloadAllPkgs(
             0 # failed to process the package
         end
         @status "$(result==1 ? '✓' : '✗') $(pkgInfo[1])"
+        result == 1 || push!(failedPkgs, pkgInfo[1])
         result
     end
     downloadedCnt = sum(mapfunc(processPkg, pkgsData.second))
-    (downloadedCnt, length(pkgsData.second))
+    (downloadedCnt, length(pkgsData.second), failedPkgs)
 end
 
 #--------------------------------------------------
@@ -153,7 +155,7 @@ downloadTar(
         rm(dtar)
         1 # unpacked successfully
     catch e
-        @error e ; 0 # downloading/unpacking failed
+        @error "Error when processing $pkgName" e ; 0 # downloading/unpacking failed
     end
 end
 
