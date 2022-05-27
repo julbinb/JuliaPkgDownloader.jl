@@ -23,15 +23,16 @@
 # Imports
 #--------------------------------------------------
 
-using JuliaPkgDownloader
+using Distributed
 using ArgParse
+@everywhere using JuliaPkgDownloader
 
 #--------------------------------------------------
 # Command Line Arguments
 #--------------------------------------------------
 
 # Parses arguments to [clone] routine (run with -h flag for more details)
-function parse_clone_cmd()
+function parse_download_cmd()
     s = ArgParseSettings()
     s.description = """
     Downloads Julia packages listed in SRC to DEST.
@@ -49,15 +50,20 @@ function parse_clone_cmd()
         "--overwrite", "-r"
             help = "if set, overwrites existing directories"
             action = :store_true
+        "--noverbose", "-q"
+            help = "if set, intermediate processing information is not printed"
+            action = :store_true
     end
     argDict = parse_args(s)
-    (argDict["src"], argDict["dest"], argDict["overwrite"])
+    ((argDict["src"], argDict["dest"], argDict["overwrite"]), argDict["noverbose"])
 end
 
 #--------------------------------------------------
 # Main
 #--------------------------------------------------
 
-# Runs the clone command
-(downloaded, total) = downloadAllPkgs(parse_clone_cmd()...)
-@info "Successfully processed $(downloaded)/$(total)"
+@info "Initiating packages downloading..."
+(args, noverbose) = parse_download_cmd()
+@everywhere JuliaPkgDownloader.setVerbose(!$noverbose)
+(downloaded, total) = downloadAllPkgs(args...)
+@info "Successfully processed $(downloaded)/$(total) packages"

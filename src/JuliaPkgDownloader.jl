@@ -31,10 +31,14 @@ include("utils/utils.jl")
 include("lib.jl")
 
 #--------------------------------------------------
-# Code
+# Additional code
 #--------------------------------------------------
 
-# Flag responsible for printing status info
+"Flag responsible for printing status info"
 VERBOSE = true
+
+setVerbose(verbose :: Bool) = begin
+    global VERBOSE = verbose
+end
 
 end # module 

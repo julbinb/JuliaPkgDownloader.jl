@@ -39,14 +39,22 @@ const PKGS_REGISTRY = Pkg.Registry.reachable_registries()[1].pkgs
 downloadAllPkgs(
     pkgListFile :: AbstractString, dest :: AbstractString, overwrite :: Bool = false
 ) = begin
+    @status "Reading packages information..."
     pkgData = readPkgsInfo(pkgListFile)
-    # collect version SHAs
-    pkgData.first && foreach(
-        pkgInfo -> push!(pkgInfo, getPkgVersionSHA(pkgInfo[2], pkgInfo[3])),
-        pkgData.second)
+    @status "Processing packages..."
     downloadAllPkgs(pkgData, dest, overwrite)
 end    
 
+"""
+Downloads all packages from `pkgData` to `dest`.
+Packages data is represented by a pair `<versions provided> => <list of pkg
+info>`.
+
+Each pkg info contains:
+- package name
+- UUID
+- version
+"""
 downloadAllPkgs(
     pkgsData :: Pair{Bool, Vector}, dest :: AbstractString, overwrite :: Bool
 ) :: Tuple{Int, Int} = begin
@@ -55,17 +63,25 @@ downloadAllPkgs(
     isdir(dest) || mkdir(dest) # create destinatation if necessary
     # choose sequential or distributed map based on the number of procs
     mapfunc = nprocs() > 1 ? pmap : map
-    clonedCnt = sum(mapfunc(
-        pkgInfo -> begin 
-            done = downloadTar(
+    # processing a single package [name, uuid, version]
+    processPkg(pkgInfo :: Vector) = begin
+        @status "processing $(pkgInfo[1])"
+        sha = ""
+        result = try
+            sha = getPkgVersionSHA(pkgInfo[2], pkgInfo[3])
+            downloadTar(
                 pkgInfo[1], pkgInfo[2], dest; 
-                sha=pkgInfo[4], overwrite=overwrite)
-            @status "foo"
-            done
-        end,
-        pkgsData.second
-    ))
-    (clonedCnt, length(pkgsData.second))
+                sha=sha, overwrite=overwrite
+            )
+        catch e
+            @error "Couldn't retrieve sha of $(pkgInfo[3]) for $(pkgInfo[1])" e
+            0 # failed to process the package
+        end
+        @status "$(result==1 ? '✓' : '✗') $(pkgInfo[1])"
+        result
+    end
+    downloadedCnt = sum(mapfunc(processPkg, pkgsData.second))
+    (downloadedCnt, length(pkgsData.second))
 end
 
 #--------------------------------------------------
@@ -105,6 +121,41 @@ end
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Cloning/downloading a single repo
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+"""
+    (StringPkgName, StringUUID, StringDirPath; StringSHA, [Bool]) → Int
+Downloads package `pkgName` given by its `uuid`
+into `dest` if the package folder in `dest` does not yet exist;
+uses `sha` to download a specif version.
+- If `overwrite` is set to `true`, re-downloads the package.
+
+Returns 1 if downoaded successfully, and 0 otherwise.
+"""
+downloadTar(
+    pkgName :: AbstractString, uuid :: AbstractString, dest :: AbstractString;
+    sha :: AbstractString, overwrite :: Bool = false
+) :: Int = begin
+    dpath = joinpath(dest, "$pkgName.jl")
+    # if the package directory already exists,
+    # we are done unless the directory is to be overwritten
+    isdir(dpath) &&
+        if overwrite
+            rm(dpath; recursive=true)
+        else
+            return 1 # nothing more to do
+        end
+    # download and unpack tarball
+    dtar = "$dpath.tar.gz"
+    try
+        downloadCompat("$JULIA_PKG_SERVER/$uuid/$sha", dtar)
+        mkdir(dpath) # create a directory for untaring
+        run(`tar -xzf $dtar -C $dpath`)
+        rm(dtar)
+        1 # unpacked successfully
+    catch e
+        @error e ; 0 # downloading/unpacking failed
+    end
+end
 
 #=
 # NOTE: sha doesn't specify a commit that can be used to checkout
@@ -151,35 +202,6 @@ gitClone(
 end
 =#
 
-"""
-    (StringPkgName, StringUUID, StringDirPath; StringSHA, [Bool]) → Int
-Downloads package `pkgName` given by its `uuid`
-into `dest` if the package folder in `dest` does not yet exist;
-uses `sha` to download a specif version.
-- If `overwrite` is set to `true`, re-downloads the package.
-
-Returns 1 if downoaded successfully, and 0 otherwise.
-"""
-downloadTar(
-    pkgName :: AbstractString, uuid :: AbstractString, dest :: AbstractString;
-    sha :: AbstractString, overwrite :: Bool = false
-) :: Int = begin
-    dpath = joinpath(dest, "$pkgName.jl")
-    # if the repo directory needs to be overwritten, remove it first
-    overwrite && isdir(dpath) && rm(dpath; recursive=true)
-    # download and unpack tarball
-    dtar = "$dpath.tar.gz"
-    try
-        downloadCompat("$JULIA_PKG_SERVER/$uuid/$sha", dtar)
-        mkdir(dpath) # create a directory for untaring
-        run(`tar -xzf $dtar -C $dpath`)
-        rm(dtar)
-        1 # unpacked successfully
-    catch e
-        @error e ; 0 # downloading/unpacking failed
-    end
-end
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Aux
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -190,11 +212,11 @@ Checks if `link` looks like a git repository link
 """
 isGitRepo(link :: AbstractString) :: Bool = endswith(link, GIT_EXT)
 
-#=
+"""
     (String, String) → String
 Returns SHA of the commit corresponding to the `version`
 of the package with the given `uuid`
-=#
+"""
 getPkgVersionSHA(
     uuid :: AbstractString, version :: AbstractString
 ) :: String = begin
