@@ -15,3 +15,7 @@ end
 struct PkgInfoInconsistentFormat <: JuliaPkgDownloaderException
     pkgData :: Vector
 end
+
+struct PkgsListInfoBadFormat <: JuliaPkgDownloaderException
+    msg :: String
+end

@@ -7,9 +7,9 @@ using Test
 
 using Main.JuliaPkgDownloader: readPkgsInfo
 using Main.JuliaPkgDownloader: PkgInfoBadFormat, PkgInfoInconsistentFormat
-using Main.JuliaPkgDownloader: gitClone, downloadTar
+using Main.JuliaPkgDownloader: downloadTar #, gitClone
 using Main.JuliaPkgDownloader: getPkgVersionSHA
-
+using Main.JuliaPkgDownloader: downloadAllPkgs
 
 #--------------------------------------------------
 # Aux values and functions
@@ -32,14 +32,14 @@ tryrm(path :: AbstractString) =
     @test !JuliaPkgDownloader.isGitRepo("https://github.com/git")
 
     @test readPkgsInfo(testFilePath("3-top-pkgs.txt")) == (true => [
-        ["https://github.com/fonsp/Pluto.jl.git","c3e4b0f8-55cb-11ea-2926-15256bba5781","0.19.5"],
-        ["https://github.com/FluxML/Flux.jl.git","587475ba-b771-5e3f-ad9e-33799f191a9c","0.13.1"],
-        ["https://github.com/JuliaLang/IJulia.jl.git","7073ff75-c697-5162-941a-fcdaad2a7d2a","1.23.3"]
+        ["Pluto","c3e4b0f8-55cb-11ea-2926-15256bba5781","0.19.5"],
+        ["Flux","587475ba-b771-5e3f-ad9e-33799f191a9c","0.13.1"],
+        ["IJulia","7073ff75-c697-5162-941a-fcdaad2a7d2a","1.23.3"]
     ])
     @test readPkgsInfo(testFilePath("3-top-pkgs-no-version.txt")) == (false => [
-        ["https://github.com/fonsp/Pluto.jl.git","c3e4b0f8-55cb-11ea-2926-15256bba5781"],
-        ["https://github.com/FluxML/Flux.jl.git","587475ba-b771-5e3f-ad9e-33799f191a9c"],
-        ["https://github.com/JuliaLang/IJulia.jl.git","7073ff75-c697-5162-941a-fcdaad2a7d2a"]
+        ["Pluto","c3e4b0f8-55cb-11ea-2926-15256bba5781"],
+        ["Flux","587475ba-b771-5e3f-ad9e-33799f191a9c"],
+        ["IJulia","7073ff75-c697-5162-941a-fcdaad2a7d2a"]
     ])
     @test readPkgsInfo(testFilePath("5-pkgs-empty.txt")) == (true => [
         ["https://github.com/JuliaLang/IJulia.jl.git","7073ff75-c697-5162-941a-fcdaad2a7d2a","1.23.3"],
@@ -50,19 +50,21 @@ tryrm(path :: AbstractString) =
     ])
     @test readPkgsInfo(testFilePath("empty.txt")) == (false => [])
 
-    @test_throws PkgInfoBadFormat readPkgsInfo(testFilePath("bad-format-1.txt"))
+    #@test_throws PkgInfoBadFormat readPkgsInfo(testFilePath("bad-format-1.txt"))
     @test_throws PkgInfoBadFormat readPkgsInfo(testFilePath("bad-format-2.txt"))
     @test_throws PkgInfoBadFormat readPkgsInfo(testFilePath("bad-format-3.txt"))
     @test_throws PkgInfoInconsistentFormat readPkgsInfo(testFilePath("inconsistent-format.txt"))
 end
 
 @testset "JuliaPkgDownloader.jl :: cloning git repo   " begin
+    #=
     gitClone(
         "https://github.com/korsbo/Latexify.jl.git", "23fbe1c1-3f47-55db-b15f-69d7ec21a316",
         TEST_FILES_DIR_PATH)
     dname1 = testFilePath("Latexify.jl")
     @test isdir(dname1)
     tryrm(dname1)
+    =#
 
     #23fbe1c1-3f47-55db-b15f-69d7ec21a316,0.15.15
     #=
@@ -73,14 +75,6 @@ end
     dname2 = testFilePath("JuMP.jl")
     @test isdir(dname2)
     =#
-
-    downloadTar("https://github.com/jump-dev/JuMP.jl.git", "4076af6c-e467-56ae-b986-b466b2749572",
-        TEST_FILES_DIR_PATH;
-        commit="936e7ebf6c84f0c0202b83bb22461f4ebc5c9969")
-    dname3 = testFilePath("JuMP.jl")
-    @test isdir(dname2)
-    tryrm(dname2)
-    tryrm("$dname2.tar.gz")
 end
 
 @testset "JuliaPkgDownloader.jl :: getting package SHA" begin
@@ -89,6 +83,20 @@ end
         "84c1cf8bec4729b8b2ef4dfc4e1db1b892ad0d30"
     @test getPkgVersionSHA("4076af6c-e467-56ae-b986-b466b2749572", "1.0.0") ==
         "936e7ebf6c84f0c0202b83bb22461f4ebc5c9969"
+end
+
+@testset "JuliaPkgDownloader.jl :: downloading tar(s)   " begin
+    downloadTar("JuMP", "4076af6c-e467-56ae-b986-b466b2749572",
+        TEST_FILES_DIR_PATH;
+        sha="936e7ebf6c84f0c0202b83bb22461f4ebc5c9969")
+    dname1 = testFilePath("JuMP.jl")
+    @test isdir(dname1)
+    tryrm(dname1)
+
+    downloadAllPkgs(testFilePath("3-top-pkgs.txt"), TEST_FILES_DIR_PATH)
+    pkgs2 = ["Pluto.jl", "Flux.jl", "IJulia.jl"]
+    @test all(pkg -> isdir(testFilePath(pkg)), pkgs2)
+    foreach(pkg -> tryrm(testFilePath(pkg)), pkgs2)
 end
 
 @testset "JuliaPkgDownloader.jl" begin

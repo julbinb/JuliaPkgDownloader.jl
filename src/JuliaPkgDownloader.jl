@@ -4,6 +4,8 @@ module JuliaPkgDownloader
 # Exports
 #--------------------------------------------------
 
+export downloadAllPkgs
+
 #--------------------------------------------------
 # Imports
 #--------------------------------------------------
@@ -34,8 +36,5 @@ include("lib.jl")
 
 # Flag responsible for printing status info
 VERBOSE = true
-
-# Write your package code here.
-greet() = print("Hello World!")
 
 end # module 
