@@ -57,13 +57,12 @@ Each pkg info contains:
 """
 downloadAllPkgs(
     pkgsData :: Pair{Bool, Vector}, dest :: AbstractString, overwrite :: Bool
-) :: Tuple{Int, Int, Vector} = begin
+) :: AbstractVector = begin
     pkgsData.first || 
         throw(PkgsListInfoBadFormat("Package versions have to be provided"))
     isdir(dest) || mkdir(dest) # create destinatation if necessary
     # choose sequential or distributed map based on the number of procs
     mapfunc = nprocs() > 1 ? pmap : map
-    failedPkgs = AbstractString[]
     # processing a single package [name, uuid, version]
     processPkg(pkgInfo :: Vector) = begin
         @status "processing $(pkgInfo[1])"
@@ -76,14 +75,12 @@ downloadAllPkgs(
             )
         catch e
             @error "Couldn't retrieve sha of $(pkgInfo[3]) for $(pkgInfo[1])" e
-            0 # failed to process the package
+            false # failed to process the package
         end
-        @status "$(result==1 ? '✓' : '✗') $(pkgInfo[1])"
-        result == 1 || push!(failedPkgs, pkgInfo[1])
-        result
+        @status "$(result ? '✓' : '✗') $(pkgInfo[1])"
+        pkgInfo[1] => result
     end
-    downloadedCnt = sum(mapfunc(processPkg, pkgsData.second))
-    (downloadedCnt, length(pkgsData.second), failedPkgs)
+    mapfunc(processPkg, pkgsData.second)
 end
 
 #--------------------------------------------------
@@ -131,12 +128,12 @@ into `dest` if the package folder in `dest` does not yet exist;
 uses `sha` to download a specif version.
 - If `overwrite` is set to `true`, re-downloads the package.
 
-Returns 1 if downoaded successfully, and 0 otherwise.
+Returns true if downoaded successfully, and false otherwise.
 """
 downloadTar(
     pkgName :: AbstractString, uuid :: AbstractString, dest :: AbstractString;
     sha :: AbstractString, overwrite :: Bool = false
-) :: Int = begin
+) :: Bool = begin
     dpath = joinpath(dest, "$pkgName.jl")
     # if the package directory already exists,
     # we are done unless the directory is to be overwritten
@@ -144,7 +141,7 @@ downloadTar(
         if overwrite
             rm(dpath; recursive=true)
         else
-            return 1 # nothing more to do
+            return true # nothing more to do
         end
     # download and unpack tarball
     dtar = "$dpath.tar.gz"
@@ -153,9 +150,10 @@ downloadTar(
         mkdir(dpath) # create a directory for untaring
         run(`tar -xzf $dtar -C $dpath`)
         rm(dtar)
-        1 # unpacked successfully
+        true # unpacked successfully
     catch e
-        @error "Error when processing $pkgName" e ; 0 # downloading/unpacking failed
+        @error "Error when processing $pkgName" e
+        false  # downloading/unpacking failed
     end
 end
 

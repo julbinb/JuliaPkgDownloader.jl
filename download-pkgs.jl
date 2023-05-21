@@ -65,7 +65,13 @@ end
 (args, noverbose) = parse_download_cmd()
 @info "Initiating packages downloading..."
 @everywhere JuliaPkgDownloader.setVerbose(!$noverbose)
-(downloaded, total, failedPkgs) = downloadAllPkgs(args...)
-@info "Successfully processed $(downloaded)/$(total) packages"
+downloadedPkgs = downloadAllPkgs(args...)
+
 @info "Failed packages:"
-foreach((pkg -> @info "- $pkg"), failedPkgs)
+failed = sum(map(
+    pkgSt -> pkgSt[2] ? 0 : (@info "- $(pkgSt[1])"; 1), 
+    downloadedPkgs
+))
+total = length(downloadedPkgs)
+@info "Failed to download $(failed)/$(total) packages"
+@info "Successfully processed $(total - failed)/$(total) packages"
